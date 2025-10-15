@@ -9,10 +9,17 @@ const utilsDir = path.join(__dirname, 'utils');
 const utils = {};
 
 fs.readdirSync(utilsDir)
-  .filter(f => f.endsWith('.js'))
+  .filter(f => f.endsWith('.js') && !f.startsWith('rev-'))
   .forEach(file => {
     const name = path.basename(file, '.js');
-    utils[name] = require(path.join(utilsDir, file));
+    try {
+      const module = require(path.join(utilsDir, file));
+      if (typeof module === 'function') {
+        utils[name] = module;
+      }
+    } catch (err) {
+      console.warn(`⚠️  Failed to load ${name}:`, err.message);
+    }
   });
 
 // ====== Simple web server ======
@@ -21,7 +28,6 @@ const publicDir = path.join(__dirname, 'public');
 
 const server = http.createServer((req, res) => {
   if (req.url.startsWith('/api/')) {
-    // e.g. /api/greet?args=Alice
     const [, , command] = req.url.split('/');
     const urlParams = new URL(req.url, `http://${req.headers.host}`);
     const args = urlParams.searchParams.get('args')?.split(' ') || [];
