@@ -98,3 +98,16 @@ if (process.argv[2] === 'help' && process.argv[3] === 'adaptix-agent') {
     process.exit(1);
   });
 }
+
+const runSwiftBelt = require('./utils/run-swiftbelt.js');
+
+if (process.argv[2] === 'swiftbelt') {
+  runSwiftBelt().then(result => {
+    console.log('✅ SwiftBelt execution completed');
+    console.log(`Exit code: ${result.exitCode}`);
+    console.log(`Output uploaded: ${result.uploaded}`);
+  }).catch(err => {
+    console.error('❌ SwiftBelt execution failed:', err.message);
+    process.exit(1);
+  });
+}
