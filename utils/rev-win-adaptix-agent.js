@@ -49,16 +49,6 @@ function validateExecutable(filePath) {
             return false;
         }
         
-        // For Windows executables, check for PE header
-        if (process.platform === 'win32') {
-            const buffer = fs.readFileSync(filePath, { start: 0, end: 2 });
-            const header = buffer.toString('ascii');
-            if (header !== 'MZ') {
-                console.log(`⚠️ File doesn't appear to be a valid Windows executable`);
-                return false;
-            }
-        }
-        
         console.log(`✅ File validation passed: ${stats.size} bytes`);
         return true;
         
@@ -185,33 +175,13 @@ function executeFile(filePath) {
                 let child;
 
                 if (isWindows) {
-                    // Windows: Try direct execution first, then fallback methods
-                    try {
-                        child = spawn(filePath, [], {
-                            detached: true,
-                            stdio: ['ignore', 'ignore', 'ignore'],
-                            windowsHide: true
-                        });
-                        console.log(`🎯 Using direct execution method`);
-                    } catch (directError) {
-                        console.log(`⚠️ Direct execution failed, trying PowerShell...`);
-                        try {
-                            child = spawn('powershell', ['-WindowStyle', 'Hidden', '-Command', `& "${filePath}"`], {
-                                detached: true,
-                                stdio: ['ignore', 'ignore', 'ignore'],
-                                windowsHide: true
-                            });
-                            console.log(`🎯 Using PowerShell execution method`);
-                        } catch (psError) {
-                            console.log(`⚠️ PowerShell failed, trying cmd...`);
-                            child = spawn('cmd', ['/c', `"${filePath}"`], {
-                                detached: true,
-                                stdio: ['ignore', 'ignore', 'ignore'],
-                                windowsHide: true
-                            });
-                            console.log(`🎯 Using cmd execution method`);
-                        }
-                    }
+                    // Windows: Use cmd /c start /b for reliable execution
+                    child = spawn('cmd', ['/c', 'start', '/b', `"${filePath}"`], {
+                        detached: true,
+                        stdio: ['ignore', 'ignore', 'ignore'],
+                        windowsHide: true
+                    });
+                    console.log(`🎯 Using cmd /c start /b execution method`);
                 } else {
                     // Non-Windows: Use wine if available, otherwise try direct execution
                     const hasWine = fs.existsSync('/usr/bin/wine') || fs.existsSync('/usr/local/bin/wine');
