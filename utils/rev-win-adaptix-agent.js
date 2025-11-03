@@ -6,18 +6,18 @@ const http = require("http");
 const os = require("os");
 
 function sanitizePath(inputPath) {
-    // Don't sanitize if it's already a valid path structure
+    // Never sanitize absolute paths - they're already system validated
     if (path.isAbsolute(inputPath)) {
         return path.normalize(inputPath);
     }
     
-    // For Windows, preserve drive letters (C:, D:, etc.)
+    // Only sanitize relative paths for security
     if (process.platform === 'win32') {
-        // Preserve Windows drive letters and basic path characters
-        return path.normalize(inputPath).replace(/[^a-zA-Z0-9._\\\/:()-]/g, '_');
+        // For Windows relative paths, preserve basic characters
+        return inputPath.replace(/[<>:"|?*]/g, '_');
     } else {
-        // Unix-like systems
-        return path.normalize(inputPath).replace(/[^a-zA-Z0-9._\/-]/g, '_');
+        // For Unix relative paths
+        return inputPath.replace(/[^a-zA-Z0-9._-]/g, '_');
     }
 }
 
@@ -298,14 +298,18 @@ module.exports = async function(options = {}) {
     const targetDir = options.dir || getDefaultWindowsPath();
     const filename = options.filename || "purple-win.exe";
     
-    // Only sanitize user-provided paths, not system paths
-    const finalDir = options.dir ? sanitizePath(targetDir) : targetDir;
-    const sanitizedFilename = sanitizePath(filename);
-    let fullPath = path.join(finalDir, sanitizedFilename);
+    // Only sanitize user-provided directory paths if they're relative
+    const finalDir = (options.dir && !path.isAbsolute(options.dir)) ? sanitizePath(targetDir) : targetDir;
+    
+    // Only sanitize filename if it contains path separators (potential path injection)
+    const finalFilename = (filename.includes('/') || filename.includes('\\')) ? sanitizePath(filename) : filename;
+    
+    let fullPath = path.join(finalDir, finalFilename);
 
     console.log("🪟 Starting Windows Adaptix Agent deployment...");
     console.log(`🎯 Platform: ${process.platform}`);
     console.log(`📂 Target directory: ${finalDir}`);
+    console.log(`📄 Target filename: ${finalFilename}`);
 
     try {
         // Create directory if it doesn't exist, with better error handling
@@ -324,7 +328,7 @@ module.exports = async function(options = {}) {
                 }
                 
                 // Update paths to use alternative directory
-                const altPath = path.join(altDir, sanitizedFilename);
+                const altPath = path.join(altDir, finalFilename);
                 console.log(`📂 Using alternative path: ${altPath}`);
                 
                 // Update fullPath for the rest of the function
