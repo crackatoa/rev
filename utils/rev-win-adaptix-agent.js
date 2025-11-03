@@ -31,28 +31,84 @@ function downloadFile(url, outputPath) {
         console.log(`📥 Downloading from: ${url}`);
         console.log(`💾 Saving to: ${outputPath}`);
 
+        // Check if file already exists and try to remove it
+        if (fs.existsSync(outputPath)) {
+            try {
+                fs.unlinkSync(outputPath);
+                console.log(`🗑️ Removed existing file: ${outputPath}`);
+            } catch (removeError) {
+                console.log(`⚠️ Could not remove existing file: ${removeError.message}`);
+                // Try with a different filename
+                const dir = path.dirname(outputPath);
+                const ext = path.extname(outputPath);
+                const base = path.basename(outputPath, ext);
+                const newPath = path.join(dir, `${base}_${Date.now()}${ext}`);
+                console.log(`🔄 Using alternative path: ${newPath}`);
+                return downloadFile(url, newPath).then(resolve).catch(reject);
+            }
+        }
+
         const request = client.get(url, (response) => {
             if (response.statusCode !== 200) {
                 reject(new Error(`Download failed: ${response.statusCode}`));
                 return;
             }
 
-            const fileStream = fs.createWriteStream(outputPath);
+            let fileStream;
+            try {
+                // Create write stream with specific options for cross-platform compatibility
+                fileStream = fs.createWriteStream(outputPath, { 
+                    flags: 'w',
+                    mode: 0o755
+                });
+            } catch (streamError) {
+                reject(new Error(`Cannot create file stream: ${streamError.message}`));
+                return;
+            }
+
             let downloadedBytes = 0;
+
+            fileStream.on('error', (streamError) => {
+                console.error(`💥 File stream error: ${streamError.message}`);
+                fileStream.destroy();
+                
+                // Try to clean up partial file
+                try {
+                    if (fs.existsSync(outputPath)) {
+                        fs.unlinkSync(outputPath);
+                    }
+                } catch (cleanupError) {
+                    console.log(`⚠️ Cleanup failed: ${cleanupError.message}`);
+                }
+                
+                reject(streamError);
+            });
 
             response.on('data', (chunk) => {
                 downloadedBytes += chunk.length;
-                fileStream.write(chunk);
+                if (!fileStream.destroyed) {
+                    fileStream.write(chunk);
+                }
             });
 
             response.on('end', () => {
-                fileStream.end();
-                console.log(`✅ Download completed: ${downloadedBytes} bytes`);
-                resolve(outputPath);
+                if (!fileStream.destroyed) {
+                    fileStream.end(() => {
+                        console.log(`✅ Download completed: ${downloadedBytes} bytes`);
+                        // Verify file was created and has content
+                        if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+                            resolve(outputPath);
+                        } else {
+                            reject(new Error("File was not created properly"));
+                        }
+                    });
+                }
             });
 
             response.on('error', (error) => {
-                fileStream.destroy();
+                if (fileStream && !fileStream.destroyed) {
+                    fileStream.destroy();
+                }
                 reject(error);
             });
         });
@@ -156,11 +212,56 @@ function getDefaultWindowsPath() {
     const isWindows = process.platform === 'win32';
     
     if (isWindows) {
-        // Windows paths
-        return process.env.TEMP || process.env.TMP || 'C:\\Windows\\Temp';
+        // Try multiple Windows temp locations in order of preference
+        const paths = [
+            process.env.TEMP,
+            process.env.TMP,
+            'C:\\Windows\\Temp',
+            'C:\\Temp',
+            path.join(os.homedir(), 'AppData', 'Local', 'Temp')
+        ];
+        
+        for (const testPath of paths) {
+            if (testPath && fs.existsSync(testPath)) {
+                try {
+                    // Test write permissions
+                    const testFile = path.join(testPath, `test_${Date.now()}.tmp`);
+                    fs.writeFileSync(testFile, 'test');
+                    fs.unlinkSync(testFile);
+                    return testPath;
+                } catch (error) {
+                    console.log(`⚠️ No write access to ${testPath}, trying next...`);
+                    continue;
+                }
+            }
+        }
+        
+        // Fallback to user's home directory
+        return os.homedir();
     } else {
-        // Unix-like systems
-        return process.env.TMPDIR || '/tmp';
+        // Unix-like systems - try multiple temp locations
+        const paths = [
+            process.env.TMPDIR,
+            '/tmp',
+            '/var/tmp',
+            os.homedir()
+        ];
+        
+        for (const testPath of paths) {
+            if (testPath && fs.existsSync(testPath)) {
+                try {
+                    // Test write permissions
+                    const testFile = path.join(testPath, `test_${Date.now()}.tmp`);
+                    fs.writeFileSync(testFile, 'test');
+                    fs.unlinkSync(testFile);
+                    return testPath;
+                } catch (error) {
+                    continue;
+                }
+            }
+        }
+        
+        return os.homedir();
     }
 }
 
@@ -187,17 +288,45 @@ module.exports = async function(options = {}) {
     
     const sanitizedDir = sanitizePath(targetDir);
     const sanitizedFilename = sanitizePath(filename);
-    const fullPath = path.join(sanitizedDir, sanitizedFilename);
+    let fullPath = path.join(sanitizedDir, sanitizedFilename);
 
     console.log("🪟 Starting Windows Adaptix Agent deployment...");
     console.log(`🎯 Platform: ${process.platform}`);
     console.log(`📂 Target directory: ${sanitizedDir}`);
 
     try {
-        // Create directory if it doesn't exist
+        // Create directory if it doesn't exist, with better error handling
         if (!fs.existsSync(sanitizedDir)) {
-            fs.mkdirSync(sanitizedDir, { recursive: true });
-            console.log(`📁 Created directory: ${sanitizedDir}`);
+            try {
+                fs.mkdirSync(sanitizedDir, { recursive: true, mode: 0o755 });
+                console.log(`📁 Created directory: ${sanitizedDir}`);
+            } catch (dirError) {
+                console.log(`⚠️ Failed to create directory ${sanitizedDir}: ${dirError.message}`);
+                // Try alternative directory
+                const altDir = path.join(os.homedir(), 'purple-temp');
+                console.log(`🔄 Trying alternative directory: ${altDir}`);
+                
+                if (!fs.existsSync(altDir)) {
+                    fs.mkdirSync(altDir, { recursive: true, mode: 0o755 });
+                }
+                
+                // Update paths to use alternative directory
+                const altPath = path.join(altDir, sanitizedFilename);
+                console.log(`📂 Using alternative path: ${altPath}`);
+                
+                // Update fullPath for the rest of the function
+                fullPath = altPath;
+            }
+        }
+
+        // Test write permissions before download
+        const testFile = path.join(path.dirname(fullPath), `test_${Date.now()}.tmp`);
+        try {
+            fs.writeFileSync(testFile, 'test');
+            fs.unlinkSync(testFile);
+            console.log(`✅ Write permissions confirmed for: ${path.dirname(fullPath)}`);
+        } catch (permError) {
+            throw new Error(`No write permissions in target directory: ${permError.message}`);
         }
 
         // Download the Windows executable
