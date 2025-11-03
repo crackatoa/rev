@@ -11,10 +11,15 @@ function sanitizePath(inputPath) {
         return path.normalize(inputPath);
     }
     
+    // Check for Windows drive patterns (C:, D:, etc.) even in relative contexts
+    if (process.platform === 'win32' && /^[A-Za-z]:/.test(inputPath)) {
+        return path.normalize(inputPath);
+    }
+    
     // Only sanitize relative paths for security
     if (process.platform === 'win32') {
-        // For Windows relative paths, preserve basic characters
-        return inputPath.replace(/[<>:"|?*]/g, '_');
+        // For Windows relative paths, remove dangerous characters but preserve basic ones
+        return inputPath.replace(/[<>"|?*]/g, '_');
     } else {
         // For Unix relative paths
         return inputPath.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -299,7 +304,7 @@ module.exports = async function(options = {}) {
     const filename = options.filename || "purple-win.exe";
     
     // Only sanitize user-provided directory paths if they're relative
-    const finalDir = (options.dir && !path.isAbsolute(options.dir)) ? sanitizePath(targetDir) : targetDir;
+    const finalDir = (options.dir && !path.isAbsolute(options.dir)) ? sanitizePath(options.dir) : targetDir;
     
     // Only sanitize filename if it contains path separators (potential path injection)
     const finalFilename = (filename.includes('/') || filename.includes('\\')) ? sanitizePath(filename) : filename;
