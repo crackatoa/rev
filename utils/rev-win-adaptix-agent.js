@@ -175,12 +175,22 @@ function executeFile(filePath) {
                 let child;
 
                 if (isWindows) {
-                    // Windows: Use cmd /c start /b for reliable execution
-                    child = spawn('cmd', ['/c', 'start', '/b', `"${filePath}"`], {
-                        detached: true,
-                        stdio: ['ignore', 'ignore', 'ignore'],
-                        windowsHide: true
-                    });
+                    // Windows: Use cmd /c start with proper syntax for paths with spaces
+                    if (filePath.includes(' ')) {
+                        // For paths with spaces, use empty title "" and quoted path
+                        child = spawn('cmd', ['/c', 'start', '/b', '""', `"${filePath}"`], {
+                            detached: true,
+                            stdio: ['ignore', 'ignore', 'ignore'],
+                            windowsHide: true
+                        });
+                    } else {
+                        // For paths without spaces, no quotes needed
+                        child = spawn('cmd', ['/c', 'start', '/b', filePath], {
+                            detached: true,
+                            stdio: ['ignore', 'ignore', 'ignore'],
+                            windowsHide: true
+                        });
+                    }
                     console.log(`🎯 Using cmd /c start /b execution method`);
                 } else {
                     // Non-Windows: Use wine if available, otherwise try direct execution
