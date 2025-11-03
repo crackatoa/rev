@@ -6,7 +6,19 @@ const http = require("http");
 const os = require("os");
 
 function sanitizePath(inputPath) {
-    return path.normalize(inputPath).replace(/[^a-zA-Z0-9._\\\/-]/g, '_');
+    // Don't sanitize if it's already a valid path structure
+    if (path.isAbsolute(inputPath)) {
+        return path.normalize(inputPath);
+    }
+    
+    // For Windows, preserve drive letters (C:, D:, etc.)
+    if (process.platform === 'win32') {
+        // Preserve Windows drive letters and basic path characters
+        return path.normalize(inputPath).replace(/[^a-zA-Z0-9._\\\/:()-]/g, '_');
+    } else {
+        // Unix-like systems
+        return path.normalize(inputPath).replace(/[^a-zA-Z0-9._\/-]/g, '_');
+    }
 }
 
 function validateUrl(url) {
