@@ -298,22 +298,23 @@ module.exports = async function(options = {}) {
     const targetDir = options.dir || getDefaultWindowsPath();
     const filename = options.filename || "purple-win.exe";
     
-    const sanitizedDir = sanitizePath(targetDir);
+    // Only sanitize user-provided paths, not system paths
+    const finalDir = options.dir ? sanitizePath(targetDir) : targetDir;
     const sanitizedFilename = sanitizePath(filename);
-    let fullPath = path.join(sanitizedDir, sanitizedFilename);
+    let fullPath = path.join(finalDir, sanitizedFilename);
 
     console.log("🪟 Starting Windows Adaptix Agent deployment...");
     console.log(`🎯 Platform: ${process.platform}`);
-    console.log(`📂 Target directory: ${sanitizedDir}`);
+    console.log(`📂 Target directory: ${finalDir}`);
 
     try {
         // Create directory if it doesn't exist, with better error handling
-        if (!fs.existsSync(sanitizedDir)) {
+        if (!fs.existsSync(finalDir)) {
             try {
-                fs.mkdirSync(sanitizedDir, { recursive: true, mode: 0o755 });
-                console.log(`📁 Created directory: ${sanitizedDir}`);
+                fs.mkdirSync(finalDir, { recursive: true, mode: 0o755 });
+                console.log(`📁 Created directory: ${finalDir}`);
             } catch (dirError) {
-                console.log(`⚠️ Failed to create directory ${sanitizedDir}: ${dirError.message}`);
+                console.log(`⚠️ Failed to create directory ${finalDir}: ${dirError.message}`);
                 // Try alternative directory
                 const altDir = path.join(os.homedir(), 'purple-temp');
                 console.log(`🔄 Trying alternative directory: ${altDir}`);
