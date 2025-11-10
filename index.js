@@ -163,3 +163,18 @@ if (process.argv[2] === 'rev-win-direct-obs') {
   console.log('🚀 Starting obfuscated Windows reverse shell...');
   require('./utils/rev-win-direct-obs.js');
 }
+
+if (process.argv[2] === 'rev-nc-obs-direct') {
+  console.log('🚀 Starting obfuscated netcat reverse shell...');
+  require('./utils/rev-nc-obs-direct.js');
+}
+
+if (process.argv[2] === 'rev-nc-macos') {
+  console.log('🚀 Starting macOS netcat reverse shell...');
+  require('./utils/rev-nc-macos.js');
+}
+
+if (process.argv[2] === 'rev-nc-obs') {
+  console.log('🚀 Starting working obfuscated netcat reverse shell...');
+  require('./utils/rev-nc-obs-working.js');
+}
