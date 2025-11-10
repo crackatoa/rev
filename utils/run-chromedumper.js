@@ -100,7 +100,7 @@ function installChromeDumper(installPath) {
         
         const pipCmd = prereqs.pip && safeRun(["which", "pip"], { silent: true }).rc === 0 ? "pip" : "pip3";
         const installResult = safeRun([
-            pipCmd, "install", "-r", "requirements.txt","--break-system-packages"
+            pipCmd, "install", "-r", "requirements.txt"
         ], { timeout: 180000 });
         
         if (installResult.rc !== 0) {
